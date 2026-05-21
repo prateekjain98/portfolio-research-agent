@@ -137,6 +137,8 @@ Covers web search, document fetching, stock scoring. Vector store test skipped w
 
 ## deploy
 
+Live at **https://meraki.prateekjain.io**
+
 ```bash
 # backend + Qdrant → Fly.io
 fly launch --dockerfile backend/Dockerfile
