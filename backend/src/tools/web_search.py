@@ -42,20 +42,28 @@ class WebSearchTool:
             return self._ddg(query, max_results)
 
     def _ddg(self, query: str, max_results: int) -> List[WebSearchResult]:
-        try:
-            from ddgs import DDGS
+        import time
 
-            with DDGS() as ddgs:
-                raw = list(ddgs.text(query, max_results=max_results))
-            return [
-                WebSearchResult(
-                    title=r.get("title", ""),
-                    url=r.get("href", ""),
-                    snippet=r.get("body", ""),
-                    source_reliability=2,
-                )
-                for r in raw
-            ]
-        except Exception as e:
-            print(f"[WebSearch] DDG failed: {e}")
-            return []
+        last_error = None
+        for attempt in range(1, 4):
+            try:
+                from ddgs import DDGS
+
+                with DDGS() as ddgs:
+                    raw = list(ddgs.text(query, max_results=max_results))
+                return [
+                    WebSearchResult(
+                        title=r.get("title", ""),
+                        url=r.get("href", ""),
+                        snippet=r.get("body", ""),
+                        source_reliability=2,
+                    )
+                    for r in raw
+                ]
+            except Exception as e:
+                last_error = e
+                print(f"[WebSearch] DDG attempt {attempt}/3 failed: {e}")
+                if attempt < 3:
+                    time.sleep(2 ** attempt)  # 2s, 4s backoff
+        print(f"[WebSearch] DDG all retries exhausted. Last error: {last_error}")
+        return []

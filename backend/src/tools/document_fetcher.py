@@ -18,6 +18,7 @@ from __future__ import annotations
 import os
 import re
 import tempfile
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -154,6 +155,7 @@ class DocumentFetcher:
         for q in queries:
             try:
                 results = self.search.run(q, max_results=10)
+                time.sleep(1)  # rate-limit: avoid exhausting DDG connection pool
             except Exception as e:
                 print(f"[DocumentFetcher] Search failed for '{q}': {e}")
                 continue

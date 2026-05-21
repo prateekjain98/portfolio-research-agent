@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
 import uuid
 from typing import AsyncIterator, List, Optional
 
@@ -93,9 +94,11 @@ class Agent:
     async def run(
         self, query: str, session_id: Optional[str] = None, history: Optional[List[dict]] = None
     ) -> AsyncIterator[str]:
+        start_time = time.time()
         history = history or []
         is_followup = False
         existing_docs = []
+        raw_data: dict = {"query": query, "documents": [], "chunks": [], "stocks": []}
 
         # --- Load or create session -----------------------------------------
         if session_id:
@@ -127,7 +130,9 @@ class Agent:
         # --- First turn: discover documents ---------------------------------
         if not is_followup or not existing_docs:
             yield "**Searching** for reports...\n\n"
+            t0 = time.time()
             docs = await asyncio.to_thread(self.fetcher.find_and_download, query, top_n=5)
+            print(f"[Agent] Discovery took {time.time()-t0:.1f}s, found {len(docs)} docs")
 
             if not docs:
                 yield "No good PDFs found. Using web snippets.\n\n"
@@ -137,6 +142,7 @@ class Agent:
                 yield "\n"
 
             yield "**Parsing**...\n\n"
+            t0 = time.time()
             texts = []
             for d in docs:
                 text = await asyncio.to_thread(self.parser.parse, d["path"])
@@ -158,7 +164,10 @@ class Agent:
             if texts:
                 yield "**Indexing**...\n\n"
                 n = await asyncio.to_thread(self.vector_store.index_documents, session_id, texts)
+                print(f"[Agent] Indexed {n} chunks in {time.time()-t0:.1f}s")
                 yield f"- {n} chunks indexed\n\n"
+            for d in docs:
+                raw_data["documents"].append({"url": d["url"], "title": d["title"], "score": d.get("score", 0)})
 
         else:
             yield f"**Follow-up.** {len(existing_docs)} docs already indexed.\n\n"
@@ -173,9 +182,12 @@ class Agent:
             retrieval_query += f" | now: {query}"
 
         chunks = await asyncio.to_thread(self.vector_store.query, session_id, retrieval_query, top_k=8)
+        print(f"[Agent] Retrieved {len(chunks)} chunks")
+        raw_data["chunks"] = chunks[:4]
         if not chunks:
             web = await asyncio.to_thread(self.web_search.run, query, max_results=5)
             chunks = [f"{r.title}: {r.snippet}" for r in web]
+            raw_data["chunks"] = chunks[:4]
 
         for i, c in enumerate(chunks[:4], 1):
             yield f"{i}. {c[:120].replace(chr(10), ' ')}...\n"
@@ -216,7 +228,10 @@ class Agent:
                 json_match = re.search(r'(\{.*\})', raw, re.DOTALL)
                 json_str = json_match.group(1) if json_match else raw
             parsed = json.loads(json_str)
+            print(f"[Agent] LLM parsed: theme={parsed.get('theme')}, stocks={len(parsed.get('stocks', []))}")
         except Exception as e:
+            print(f"[Agent] LLM JSON parse failed: {e}")
+            print(f"[Agent] Raw LLM output (first 500 chars): {raw[:500]}")
             yield f"LLM error: {e}\n\n"
             parsed = {"theme": query, "summary": "", "conviction": "Medium", "stocks": []}
 
@@ -230,6 +245,7 @@ class Agent:
         )
 
         stocks = parsed.get("stocks", [])
+        print(f"[Agent] Scoring {len(stocks)} stocks")
         scored = []
         for s in stocks:
             ticker = s.get("ticker", "")
@@ -264,7 +280,9 @@ class Agent:
                 "thematic_fit": fit, "risk": sr["risk_score"], "momentum": sr["momentum_score"],
                 "liquidity": sr["liquidity_score"], "total": total,
             })
+            raw_data["stocks"].append({"ticker": ticker, "total_score": total, **sr})
 
+        print(f"[Agent] Pipeline complete in {time.time()-start_time:.1f}s")
         text = self._format(parsed, scored)
         await asyncio.to_thread(
             self.db.table("messages").insert({
