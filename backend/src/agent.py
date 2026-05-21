@@ -196,8 +196,8 @@ class Agent:
         messages = [{"role": "system", "content": system_msg}]
         if is_followup and history:
             for m in history[-6:]:
-                if m.get("role") in ("user", "assistant"):
-                    messages.append({"role": m["role"], "content": m["content"]})
+                if m.get("role") == "user":
+                    messages.append({"role": "user", "content": m["content"]})
         else:
             messages.append({"role": "user", "content": query})
 
