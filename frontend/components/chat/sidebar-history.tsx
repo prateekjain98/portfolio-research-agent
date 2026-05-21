@@ -89,7 +89,7 @@ export function getChatHistoryPaginationKey(
     return `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/history?limit=${PAGE_SIZE}`;
   }
 
-  const firstChatFromPage = previousPageData.chats.at(-1);
+  const firstChatFromPage = previousPageData.chats?.at(-1);
 
   if (!firstChatFromPage) {
     return null;
@@ -124,7 +124,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
     : false;
 
   const hasEmptyChatHistory = paginatedChatHistories
-    ? paginatedChatHistories.every((page) => page.chats.length === 0)
+    ? paginatedChatHistories.every((page) => page.chats?.length === 0)
     : false;
 
   const handleDelete = () => {
@@ -221,7 +221,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
             {paginatedChatHistories &&
               (() => {
                 const chatsFromHistory = paginatedChatHistories.flatMap(
-                  (paginatedChatHistory) => paginatedChatHistory.chats
+                  (paginatedChatHistory) => paginatedChatHistory.chats ?? []
                 );
 
                 const groupedChats = groupChatsByDate(chatsFromHistory);
