@@ -1,172 +1,174 @@
-# basis
+# Basis
 
 <p align="center">
-  <b>Autonomous investment research agent.</b><br>
-  Type a theme. It finds PDF reports, reads them, returns scored stock theses.
+  <strong>Autonomous investment research. From thesis to trade.</strong>
+</p>
+
+<p align="center">
+  <a href="https://meraki.prateekjain.io">Live Demo</a> ·
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="https://github.com/prateekjain98/basis/issues">Issues</a>
 </p>
 
 ---
 
-## what it does
+## What is Basis?
 
-Analysts spend hours reading 100-page investment reports. Basis does it in 60 seconds.
+Basis is an autonomous research agent for thematic investing. You state a thesis — "AI infrastructure for the next decade" — and it:
+
+1. **Discovers** situational awareness documents (industry reports, whitepapers, SEC filings)
+2. **Reads** and indexes them into a searchable corpus
+3. **Reasons** like a hedge fund analyst: macro context, sector dynamics, competitive positioning
+4. **Decides** exact trades with position sizing, entry prices, stop losses
+5. **Tracks** the thesis over time as new information emerges
+
+Follow-up questions adjust positions without re-researching the entire corpus.
+
+## Demo
 
 ```
-User: "invest in AI infrastructure"
+User: "I want to bet on AI infrastructure over the next decade"
 
-Agent:
-  → searched web, found 30 PDF candidates
-  → scored URLs, downloaded top 15
-  → parsed 2 real reports (Meketa, Brookfield)
-  → indexed 89 chunks in Qdrant
-  → retrieved top-8 relevant passages
-  → asked LLM to synthesize thesis
-  → scored 3 stocks with real yfinance data
+Basis:
+  → Found 5 relevant reports (Morgan Stanley, Brookfield, Dell)
+  → Parsed 179K words into 571 indexed passages
+  → Built macro context: data center capex 25% CAGR, power constraints
+  → Selected 3 positions with conviction levels
 
-Result: NVDA (87/100), VST (74/100), DLR (71/100)
-        with conviction, entry prices, rationale
+  NVDA  — 3% allocation @ $224  → target $350  (High conviction)
+  AVGO  — 2% allocation @ $421  → target $600  (Medium conviction)
+  VST   — 1% allocation @ $82   → target $120  (Hedge: power utility)
+
+User: "What if China bans AI chip exports?"
+
+Basis:
+  → Retrieved existing corpus on supply chain risk
+  → Adjusted: reduced NVDA to 1.5%, added AMD (less China exposure)
+  → New stop: NVDA $180, AVGO $350
 ```
 
-Follow-up questions reuse the same document corpus — no re-searching. Ask "what about the risks?" and it adjusts the thesis using already-indexed passages.
+## Quickstart
 
-## demo
+**Prerequisites**
 
-**Document discovery** — finds real PDFs from web search:
+- Python 3.13
+- Node.js 20+
+- Docker (for local Qdrant)
+
+**Backend**
 
 ```bash
-$ python -c "from backend.src.tools.document_fetcher import DocumentFetcher; \
-  print(DocumentFetcher().find_and_download('AI infrastructure', top_n=3))"
-
-[DocumentFetcher] 3 good docs out of 29 candidates
-  → AI Infrastructure Investment WHITEPAPER - meketa.com | score=0.65
-  → [PDF] building the backbone of AI. - Brookfield | score=0.49
-  → [PDF] The-State-of-AI-Infrastructure-at-Scale | score=0.42
-```
-
-**Stock scoring** — real yfinance data:
-
-```bash
-$ python -c "from backend.src.tools.stock_scorer import StockScorer; \
-  import json; s=StockScorer().score('NVDA'); \
-  print(json.dumps({k:v for k,v in s.items() if k!='metrics'}, indent=2))"
-
-{
-  "fundamentals_score": 85,
-  "risk_score": 75,
-  "momentum_score": 75,
-  "liquidity_score": 80
-}
-```
-
-**API** — stream a thesis:
-
-```bash
-curl -N -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{"messages":[{"role":"user","content":"invest in AI infrastructure"}]}'
-```
-
-## quickstart
-
-```bash
-git clone https://github.com/prateekjain98/basis.git
-cd basis
-
-# backend
 cd backend
-cp .env.example .env
-# edit .env — add OPENAI_API_KEY, SUPABASE_URL, SUPABASE_KEY
 python3.13 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# frontend
-cd ../frontend
+cp .env.example .env
+# Add your OPENAI_API_KEY to .env
+```
+
+**Frontend**
+
+```bash
+cd frontend
 npm install
 ```
 
-Run:
+**Run**
 
 ```bash
-# infra
 docker compose up -d qdrant
 
-# backend (port 8000)
-cd backend && source .venv/bin/activate && uvicorn src.main:app --reload
+# Terminal 1
+cd backend && uvicorn src.main:app --reload
 
-# frontend (port 3000)
+# Terminal 2
 cd frontend && npm run dev
 ```
 
 Open http://localhost:3000.
 
-> **Note:** Python 3.14 won't work. LlamaIndex C extensions fail. Use 3.13.
+## Architecture
 
-No OpenAI key? Use [OpenRouter](https://openrouter.ai) free models — zero code changes:
 ```
-OPENAI_API_KEY=sk-or-v1-...
-OPENAI_BASE_URL=https://openrouter.ai/api/v1
-LLM_MODEL=meta-llama/llama-3.1-70b-instruct
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   User      │────▶│  Frontend   │────▶│   Backend   │
+│  (Next.js)  │◀────│  (Vercel)   │◀────│ (Cloud Run) │
+└─────────────┘     └─────────────┘     └──────┬──────┘
+                                                │
+                       ┌────────────────────────┼────────────────────────┐
+                       │                        │                        │
+                       ▼                        ▼                        ▼
+                ┌─────────────┐        ┌─────────────┐         ┌─────────────┐
+                │   Qdrant    │        │  Supabase   │         │    LLM      │
+                │ (Vector DB) │        │  (Session   │         │ (OpenAI /   │
+                │             │        │   + Trade   │         │  Anthropic) │
+                └─────────────┘        │   Journal)  │         └─────────────┘
+                                       └─────────────┘
 ```
 
-## how it works
+**Agent Pipeline**
 
-`backend/src/agent.py` — ~200 lines, plain Python. No LangChain.
+| Step | Action | Details |
+|------|--------|---------|
+| Discover | Web search + URL scoring | 4 query strategies, 30 candidates scored on domain authority |
+| Download | Parallel fetch + validation | Magic-byte validation, size checks, 20s timeout |
+| Parse | PDF → structured text | LlamaParse primary, PyMuPDF fallback |
+| Index | Chunk + embed → Qdrant | Per-session collections, OpenAI embeddings |
+| Retrieve | Semantic search | Top-8 passages blended with conversation context |
+| Synthesize | LLM → structured thesis | JSON output: theme, conviction, summary, stock list |
+| Score | yfinance + 5-factor rubric | Fundamentals 30%, Thematic fit 25%, Risk 20%, Momentum 15%, Liquidity 10% |
+| Track | Persist to Supabase | Full trade journal with rationale, entry, target, stop |
 
-| step | what | tool |
-|------|------|------|
-| search | 4 DDG queries, score 30 candidates | `document_fetcher.py` |
-| download | top 15 in parallel, 20s timeout | `document_fetcher.py` |
-| parse | LlamaParse → markdown (tables preserved) | `document_parser.py` |
-| index | chunk + embed → Qdrant | `vector_store.py` |
-| retrieve | top-8 passages for query | `vector_store.py` |
-| synthesize | LLM reads passages → JSON thesis | OpenAI |
-| score | yfinance + 5-factor rubric | `stock_scorer.py` |
-| persist | Supabase | `supabase_client.py` |
+## Deployment
 
-Follow-ups skip search/parse/index. Blends conversation history into retrieval query.
-
-## tests
+**Backend → Google Cloud Run**
 
 ```bash
 cd backend
-pytest ../tests/test_agent.py -v
+gcloud builds submit --tag gcr.io/PROJECT/basis-backend
+gcloud run deploy basis-backend --image gcr.io/PROJECT/basis-backend --allow-unauthenticated
 ```
 
-Covers web search, document fetching, stock scoring. Vector store test skipped without real OpenAI key (embeddings).
-
-## deploy
-
-Live at **https://meraki.prateekjain.io**
+**Frontend → Vercel**
 
 ```bash
-# backend + Qdrant → Fly.io
-fly launch --dockerfile backend/Dockerfile
-
-# frontend → Vercel
+cd frontend
 vercel --prod
 ```
 
-$0/month at rest on free tiers.
+## Environment
 
-## project layout
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `OPENAI_API_KEY` | Yes | LLM synthesis |
+| `QDRANT_URL` | Yes | Vector store (local or Qdrant Cloud) |
+| `QDRANT_API_KEY` | For Cloud | Qdrant Cloud authentication |
+| `SUPABASE_URL` | Yes | Session + trade persistence |
+| `SUPABASE_KEY` | Yes | Supabase service role key |
+| `TAVILY_API_KEY` | Optional | Premium web search (falls back to DDG) |
+
+## Project Structure
 
 ```
-backend/src/
-  agent.py              # pipeline
-  main.py               # FastAPI: /chat, /sessions, /health
-  tools/
-    document_fetcher.py # find 30 PDFs, return best 5
-    document_parser.py  # LlamaParse wrapper
-    vector_store.py     # Qdrant session manager
-    stock_scorer.py     # yfinance + rubric
-    web_search.py       # Tavily / DDG
-frontend/app/(chat)/api/chat/route.ts   # proxy to backend
-docs/
-  architecture.md       # stack decisions
-  failure_modes.md      # known issues
+backend/
+  src/
+    agent.py              # Orchestrator: discover → parse → index → retrieve → score
+    main.py               # FastAPI: /chat, /sessions, /health
+    tools/
+      document_fetcher.py # Multi-strategy search + scoring
+      document_parser.py  # LlamaParse + PyMuPDF fallback
+      vector_store.py     # Qdrant session manager
+      stock_scorer.py     # yfinance + rubric
+      web_search.py       # Tavily / DuckDuckGo
+frontend/
+  app/(chat)/             # Next.js chat UI
+  components/chat/        # Message threads, input, sidebar
+  lib/ai/models.ts        # Model definitions
+  lib/db/queries.ts       # Database stubs
 ```
 
-## license
+## License
 
 MIT
