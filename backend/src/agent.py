@@ -219,8 +219,6 @@ class Agent:
             for m in history[-6:]:
                 if m.get("role") == "user":
                     messages.append({"role": "user", "content": m["content"]})
-        else:
-            messages.append({"role": "user", "content": query})
 
         messages.append({
             "role": "user",
