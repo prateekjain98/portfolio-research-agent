@@ -2,72 +2,89 @@
 
 The eval suite tests the agent on three dimensions from the brief:
 1. **Task completion rate** — Does the agent produce a valid thesis with scored stocks?
-2. **Hallucination on tool outputs** — Are financial claims grounded in real data?
+2. **Hallucination on tool outputs** — Are claims grounded in retrieved documents?
 3. **Graceful failure handling** — Does the agent degrade cleanly when tools fail?
 
 ---
 
 ## Test Cases
 
-8 test cases cover the agent's core capabilities and edge cases:
+8 test cases cover core capabilities and edge cases:
 
-| ID | Name | Prompt | What it tests |
+| ID | Name | Prompt | Validates |
 |---|---|---|---|
-| tc-01 | Simple ticker query | `"Thesis on NVDA"` | Basic tool use: financial data + web search |
-| tc-02 | Thematic without ticker | `"Investment thesis on AI infrastructure buildout"` | Document discovery path |
-| tc-03 | Follow-up in session | `"What are the key risks?"` (after NVDA thesis) | Session memory: recalls previous context |
-| tc-04 | Ambiguous prompt | `"Is this a good buy?"` | Graceful degradation: no ticker, no theme |
-| tc-05 | Bad ticker | `"Thesis on XYZFAKE123"` | Tool failure handling: yfinance returns nothing |
-| tc-06 | International market | `"Thesis on Reliance Industries"` | Non-US ticker support |
-| tc-07 | Multi-turn memory | `"Compare that to AMD"` (after NVDA thesis) | Comparison across session history |
-| tc-08 | No search results | `"Thesis on a very obscure private company"` | Empty corpus handling |
+| tc-01 | Simple ticker query | `"Thesis on NVDA"` | Tool use: financial data + web search |
+| tc-02 | Thematic query | `"Investment thesis on AI infrastructure"` | Document discovery path |
+| tc-03 | Follow-up | `"What are the key risks?"` (after NVDA thesis) | Session memory recall |
+| tc-04 | Ambiguous prompt | `"Is this a good buy?"` | Graceful degradation |
+| tc-05 | Bad ticker | `"Thesis on XYZFAKE123"` | Tool failure handling |
+| tc-06 | International | `"Thesis on Reliance Industries"` | Non-US ticker support |
+| tc-07 | Multi-turn compare | `"Compare that to AMD"` (after NVDA) | Comparison across history |
+| tc-08 | No results | `"Thesis on obscure private company"` | Empty corpus handling |
 
 ---
 
 ## Metrics
 
-### Automated Checks
+Metrics are split into three layers:
 
-`eval/metrics.py` implements three classes of checks:
+### Layer 1 — Component Metrics
 
-**1. Thesis structure**
-```python
-check_thesis_structure(thesis_text) -> {
-    "has_thesis": bool,      # Contains "##" header or "investment"
-    "has_rationale": bool,   # Contains "rationale" or "bull"
-    "has_risks": bool,       # Contains "risk" or "bear"
-    "has_conviction": bool,  # Contains "conviction"
-}
-```
+| Metric | How it's computed |
+|---|---|
+| Document discovery | `1.0` if ≥1 valid PDF selected, else `0.0` |
+| Document quality | Average score of selected documents |
+| Tool use accuracy | Fraction of expected tools actually called |
+| Error recovery | `1.0` no errors; `0.5` errors but thesis generated; `0.0` pipeline killed |
 
-**2. Grounding (hallucination detection)**
-```python
-check_grounding(thesis_text, raw_data) -> bool
-```
-Extracts all `$X`, `X%`, and decimal numbers from the thesis and verifies they appear in the raw tool output. Allows 1 unmatched number (could be LLM knowledge or rounding).
+### Layer 2 — RAG Pipeline Metrics
 
-**3. Rubric scoring**
-Each test case defines a rubric of expected boolean checks. The score is the fraction of checks that pass. A test passes if score ≥ 75%.
+| Metric | How it's computed |
+|---|---|
+| Retrieval precision@k | Fraction of retrieved chunks containing query keywords |
+| Retrieval recall | Documents represented in chunks / total selected documents |
+| Faithfulness | Supported claims / total verifiable claims (claims are sentences with numbers or tickers) |
+| Answer relevancy | Keyword overlap between query and thesis |
+
+### Layer 3 — End-to-End Metrics
+
+| Metric | How it's computed |
+|---|---|
+| Task completion | `1.0` if thesis has theme header + stock recommendations |
+| Thesis structure | Per-section checks: theme, rationale, risks, conviction, scores |
+| Session memory | For follow-ups: `1.0` if response references previous context |
+| Graceful degradation | `1.0` acknowledges limits + generates thesis; `0.5` generates without acknowledgment; `0.0` crashes |
+| Hallucination rate | `1.0 - faithfulness` |
+
+### Aggregate Score
+
+Weighted average across all metrics:
+
+| Metric | Weight |
+|---|---|
+| Task completion | 20% |
+| Faithfulness | 20% |
+| Tool use accuracy | 15% |
+| Retrieval precision | 10% |
+| Retrieval recall | 10% |
+| Graceful degradation | 10% |
+| Answer relevancy | 10% |
+| Session memory | 5% |
+
+Pass threshold: **≥ 70%**
 
 ---
 
-## Running the Evals
-
-### Prerequisites
-- Backend running at `http://localhost:8000` (or set `BACKEND_URL`)
-- `OPENAI_API_KEY` set (required for LLM synthesis)
-
-### Run
+## Running Evals
 
 ```bash
 cd eval
 python run_eval.py
 ```
 
-### Output
+Requires `BACKEND_URL` (defaults to `http://localhost:8000`) and a working LLM provider.
 
-The runner prints per-test results and a summary:
-
+Output:
 ```
 Results: 6/8 passed (75%)
 Average score: 82%
@@ -84,42 +101,15 @@ A JSON report is written to `eval/outputs/eval_{timestamp}.json`.
 
 | Test | What it checks |
 |---|---|
-| `test_web_search_returns_results` | Web search returns a list |
+| `test_web_search_returns_results` | Returns a list |
 | `test_web_search_graceful_on_total_failure` | No crash on nonsense query |
-| `test_stock_scorer_returns_partial_on_failure` | Fake ticker returns `None` fields, not exception |
-| `test_stock_scorer_populates_known_ticker` | AAPL returns real data from yfinance |
-| `test_vector_store_lifecycle` | Index → query → delete works end-to-end |
+| `test_stock_scorer_returns_partial_on_failure` | Fake ticker returns `None`, not exception |
+| `test_stock_scorer_populates_known_ticker` | AAPL returns real yfinance data |
+| `test_vector_store_lifecycle` | Index → query → delete works |
 | `test_document_fetcher_finds_pdfs` | Finds, scores, downloads real PDFs |
-| `test_document_fetcher_scoring` | Scoring logic produces monotonic rankings |
+| `test_document_fetcher_scoring` | Rankings are monotonic |
 
 Run:
 ```bash
 cd backend && pytest ../tests/test_agent.py -v
 ```
-
----
-
-## Current Results
-
-**Blocked by LLM quota.** The eval runner requires a working LLM provider to synthesize theses. As of the last run:
-
-- OpenAI: 429 insufficient_quota
-- Anthropic: 404 (expired key)
-- Vertex AI: 404 (no model access)
-
-**Unit tests pass:** 6/7 (vector store test is skipped without a real OpenAI key for embeddings).
-
-**To run evals without spending API credits:**
-1. Wire Ollama (`mistral:latest` on `localhost:11434`) into `backend/src/agent.py::_llm_chat()`
-2. Disable JSON mode for local models (use regex extraction instead)
-3. Re-run `python eval/run_eval.py`
-
----
-
-## Known Eval Gaps
-
-1. **Raw data instrumentation:** `check_grounding()` receives empty `raw_data` because the backend does not return tool outputs alongside the thesis. A `/debug` endpoint or structured logging would fix this.
-
-2. **Non-determinism:** Web search results change daily. The same test case may pass on Monday and fail on Tuesday if the discovered documents differ. Mocking the fetcher or adding a `--use-cached-docs` flag would make evals deterministic.
-
-3. **No human eval:** Automated checks catch structure and grounding, but not thesis quality. A human rater would score: "Is this actually a good investment thesis?" We have not built this.
