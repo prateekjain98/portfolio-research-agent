@@ -22,17 +22,41 @@ PyMuPDF returns scrambled text on multi-column financial reports — table rows 
 
 Without a LlamaParse key, `DocumentParser.parse()` returns `None` and the agent falls back to web snippets. The pipeline doesn't crash.
 
-## no langchain
+## why not langchain
 
-LangGraph would give me a DAG visualization and built-in retries. But the pipeline is a straight line:
+I get asked this a lot. Three reasons:
+
+**1. The pipeline is linear, not exploratory**
+
+LangChain's value is the ReAct loop — the agent decides "should I search? should I calculate? should I ask the user?" Our pipeline is a fixed sequence:
 
 ```
 search → fetch → parse → index → retrieve → score
 ```
 
-LangGraph adds ~200 lines of boilerplate for no benefit. `agent.py` is ~200 lines of plain Python. I can read it top-to-bottom and know exactly what happens.
+There's no decision-making at each step. We always do all six. LangChain's abstractions add complexity without adding capability.
 
-If I ever add a second agent (e.g., a risk analyst that debates the main researcher), LangGraph becomes worth it.
+**2. Follow-ups don't need an agent framework**
+
+The user asked "if I ask follow-up questions, how is that handled?" The answer: load the message history, blend it into the retrieval query, and call the LLM again. That's 15 lines of code:
+
+```python
+if is_followup:
+    retrieval_query = " | ".join(
+        f"{m['role']}: {m['content'][:100]}" for m in history[-4:]
+    )
+    retrieval_query += f" | now: {query}"
+```
+
+LangChain's `ConversationBufferMemory` would do the same thing but wrap it in 3 layers of abstraction. I'd still need to write the retrieval logic myself.
+
+**3. Debugging**
+
+When the LLM wraps JSON in markdown fences (happens ~30% of the time with GPT-4o-mini), I need to find where in the pipeline to add the stripping logic. In plain Python, it's obvious — it's the line after `chat.completions.create()`. In LangChain, I'd be digging through `JSONOutputParser` internals.
+
+**When would I use LangChain?**
+
+If I added a second agent — say, a risk analyst that reads the same documents and argues with the main researcher — then LangGraph's DAG and state management become worth the complexity. For a single linear pipeline, it's overkill.
 
 ## yfinance
 
