@@ -288,11 +288,14 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     if (loadedChatIds.current.has(chatId)) {
       return;
     }
-    if (chatData?.messages) {
+    // Only load messages from DB if the chat actually exists (userId != null).
+    // This prevents clearing locally-added messages for new chats that haven't
+    // been persisted yet.
+    if (chatData?.userId != null) {
       loadedChatIds.current.add(chatId);
-      setMessages(chatData.messages);
+      setMessages(chatData.messages ?? []);
     }
-  }, [chatId, chatData?.messages, setMessages]);
+  }, [chatId, chatData, setMessages]);
 
   const prevChatIdRef = useRef(chatId);
   useEffect(() => {
