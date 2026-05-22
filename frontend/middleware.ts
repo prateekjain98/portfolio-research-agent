@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 const PASSWORD_COOKIE = "basis_auth";
-const HARDCODED_PASSWORD = "basis2024";
+const HARDCODED_PASSWORD = "basis";
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

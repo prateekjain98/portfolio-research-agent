@@ -228,7 +228,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
 
                 return (
                   <div className="flex flex-col gap-4">
-                    {groupedChats.today.length > 0 && (
+                    {groupedChats.today?.length > 0 && (
                       <div>
                         <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/70">
                           Today
@@ -248,7 +248,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                       </div>
                     )}
 
-                    {groupedChats.yesterday.length > 0 && (
+                    {groupedChats.yesterday?.length > 0 && (
                       <div>
                         <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/70">
                           Yesterday
@@ -268,7 +268,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                       </div>
                     )}
 
-                    {groupedChats.lastWeek.length > 0 && (
+                    {groupedChats.lastWeek?.length > 0 && (
                       <div>
                         <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/70">
                           Last 7 days
@@ -288,7 +288,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                       </div>
                     )}
 
-                    {groupedChats.lastMonth.length > 0 && (
+                    {groupedChats.lastMonth?.length > 0 && (
                       <div>
                         <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/70">
                           Last 30 days
@@ -308,7 +308,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                       </div>
                     )}
 
-                    {groupedChats.older.length > 0 && (
+                    {groupedChats.older?.length > 0 && (
                       <div>
                         <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/70">
                           Older

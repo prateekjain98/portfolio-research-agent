@@ -3,25 +3,21 @@ import { NextResponse } from "next/server";
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 
 // NOTE: In-memory map won't persist across serverless invocations.
-// We persist via a client-side cookie set by the backend response.
 const chatToSession = new Map<string, string>();
 
 export async function POST(request: Request) {
   const body = await request.json();
   const chatId = body.id as string | undefined;
 
-  // Extract user message(s) from Vercel Chat SDK format
   let messages: Array<{ role: string; content: string }> = [];
 
   if (body.message && Array.isArray(body.message.parts)) {
-    // Single new message format
     const textParts = body.message.parts
       .filter((p: any) => p.type === "text")
       .map((p: any) => p.text);
     const content = textParts.join("");
     messages = [{ role: "user", content }];
   } else if (body.messages && Array.isArray(body.messages)) {
-    // Full message history format
     messages = body.messages.map((msg: any) => {
       if (msg.parts && Array.isArray(msg.parts)) {
         const text = msg.parts
@@ -34,7 +30,6 @@ export async function POST(request: Request) {
     });
   }
 
-  // Get existing session mapping
   const sessionId = chatId ? chatToSession.get(chatId) : undefined;
 
   const backendBody = {
@@ -56,10 +51,8 @@ export async function POST(request: Request) {
     );
   }
 
-  // Stream response back, capturing session ID from first chunk if new
   const reader = backendRes.body?.getReader();
   const decoder = new TextDecoder();
-
   let sessionIdCaptured = false;
 
   const stream = new ReadableStream({
@@ -74,7 +67,6 @@ export async function POST(request: Request) {
 
         const chunk = decoder.decode(value, { stream: true });
 
-        // Extract session ID from first chunk if this is a new chat
         if (!sessionIdCaptured && chatId && !sessionId) {
           const match = chunk.match(/\*\*Thesis ID:\*\* `([a-f0-9]+)`/);
           if (match) {
