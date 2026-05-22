@@ -13,8 +13,32 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+let _nativeFetch: typeof fetch | null = null;
+
+function getNativeFetch(): typeof fetch {
+  if (typeof window === 'undefined') return fetch;
+  if (_nativeFetch) return _nativeFetch;
+  try {
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+    const win = iframe.contentWindow;
+    if (win && win.fetch !== window.fetch) {
+      _nativeFetch = win.fetch.bind(win);
+      document.body.removeChild(iframe);
+      return _nativeFetch;
+    }
+    document.body.removeChild(iframe);
+  } catch {
+    // ignore
+  }
+  _nativeFetch = fetch;
+  return _nativeFetch;
+}
+
 export const fetcher = async (url: string) => {
-  const response = await fetch(url);
+  const doFetch = typeof window !== 'undefined' ? getNativeFetch() : fetch;
+  const response = await doFetch(url);
 
   if (!response.ok) {
     const { code, cause } = await response.json();
@@ -28,12 +52,18 @@ export async function fetchWithErrorHandlers(
   input: RequestInfo | URL,
   init?: RequestInit,
 ) {
+  const doFetch = typeof window !== 'undefined' ? getNativeFetch() : fetch;
   try {
-    const response = await fetch(input, init);
+    const response = await doFetch(input, init);
 
     if (!response.ok) {
-      const { code, cause } = await response.json();
-      throw new ChatbotError(code as ErrorCode, cause);
+      const text = await response.text();
+      try {
+        const { code, cause } = JSON.parse(text);
+        throw new ChatbotError(code as ErrorCode, cause);
+      } catch {
+        throw new ChatbotError('offline:chat', text.slice(0, 200));
+      }
     }
 
     return response;

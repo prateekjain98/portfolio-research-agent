@@ -10,10 +10,10 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // Allow static assets and API auth routes
+  // Allow static assets, API routes, and login page
   if (
     pathname.startsWith("/_next") ||
-    pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/api/") ||
     pathname === "/favicon.ico" ||
     pathname === "/login"
   ) {

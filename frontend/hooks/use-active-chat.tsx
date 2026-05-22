@@ -2,7 +2,7 @@
 
 import type { UseChatHelpers } from "@ai-sdk/react";
 import { useChat } from "@ai-sdk/react";
-import { PlainTextChatTransport } from "@/lib/ai/plain-text-transport";
+import { TextStreamChatTransport } from "ai";
 import { usePathname } from "next/navigation";
 import {
   createContext,
@@ -27,6 +27,7 @@ import type { Vote } from "@/lib/db/schema";
 import { ChatbotError } from "@/lib/errors";
 import type { ChatMessage } from "@/lib/types";
 import { fetcher, fetchWithErrorHandlers, generateUUID, getTextFromMessage } from "@/lib/utils";
+import { ensureUser, createChat, createMessages, generateTitleFromUserMessage } from "@/app/(chat)/actions";
 
 type ActiveChatContextValue = {
   chatId: string;
@@ -34,6 +35,7 @@ type ActiveChatContextValue = {
   setMessages: UseChatHelpers<ChatMessage>["setMessages"];
   sendMessage: UseChatHelpers<ChatMessage>["sendMessage"];
   status: UseChatHelpers<ChatMessage>["status"];
+  error: UseChatHelpers<ChatMessage>["error"];
   stop: UseChatHelpers<ChatMessage>["stop"];
   regenerate: UseChatHelpers<ChatMessage>["regenerate"];
   addToolApprovalResponse: UseChatHelpers<ChatMessage>["addToolApprovalResponse"];
@@ -82,6 +84,11 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
   const [input, setInput] = useState("");
   const [showCreditCardAlert, setShowCreditCardAlert] = useState(false);
 
+  // Ensure demo user exists in DB
+  useEffect(() => {
+    ensureUser().catch(() => {});
+  }, []);
+
   const { data: chatData, isLoading } = useSWR(
     isNewChat
       ? null
@@ -97,11 +104,19 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     ? "private"
     : (chatData?.visibility ?? "private");
 
+  const chatExistsRef = useRef(false);
+  useEffect(() => {
+    if (chatData) {
+      chatExistsRef.current = true;
+    }
+  }, [chatData]);
+
   const {
     messages,
     setMessages,
-    sendMessage,
+    sendMessage: rawSendMessage,
     status,
+    error: chatError,
     stop,
     regenerate,
     resumeStream,
@@ -122,7 +137,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
         ) ?? false
       );
     },
-    transport: new PlainTextChatTransport({
+    transport: new TextStreamChatTransport({
       api: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/chat`,
       fetch: fetchWithErrorHandlers,
       prepareSendMessagesRequest(request) {
@@ -165,7 +180,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     onData: (dataPart) => {
       setDataStream((ds) => (ds ? [...ds, dataPart] : []));
     },
-    onFinish: ({ message }) => {
+    onFinish: async ({ message }) => {
       try {
         const text = getTextFromMessage(message);
         const match = text.match(/\*\*Thesis ID:\*\* `([a-f0-9-]+)`/);
@@ -175,6 +190,24 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
       } catch {
         // ignore localStorage errors
       }
+
+      // Persist assistant message
+      try {
+        await createMessages({
+          messages: [
+            {
+              id: message.id,
+              chatId,
+              role: message.role,
+              parts: message.parts,
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        });
+      } catch {
+        // ignore persistence errors
+      }
+
       mutate(unstable_serialize(getChatHistoryPaginationKey));
     },
     onError: (error) => {
@@ -190,6 +223,60 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
       }
     },
   });
+
+  // Wrap sendMessage to persist chat and user message
+  const sendMessage = useMemo(() => {
+    return async (message: Parameters<typeof rawSendMessage>[0]) => {
+      const msg = message as ChatMessage;
+      // Ensure message has an ID so useChat and DB stay in sync
+      if (!msg.id) {
+        (msg as any).id = generateUUID();
+      }
+
+      let title = "New chat";
+      try {
+        title = await generateTitleFromUserMessage({
+          message: { parts: msg.parts },
+        });
+      } catch {
+        // fallback title
+      }
+
+      // Create chat if it doesn't exist yet
+      if (!chatExistsRef.current) {
+        try {
+          await createChat({
+            id: chatId,
+            title,
+            userId: "00000000-0000-0000-0000-000000000001",
+            visibility: "private",
+          });
+          chatExistsRef.current = true;
+        } catch {
+          // ignore
+        }
+      }
+
+      // Persist user message
+      try {
+        await createMessages({
+          messages: [
+            {
+              id: msg.id,
+              chatId,
+              role: msg.role,
+              parts: msg.parts,
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        });
+      } catch {
+        // ignore persistence errors
+      }
+
+      return rawSendMessage(message);
+    };
+  }, [rawSendMessage, chatId]);
 
   const loadedChatIds = useRef(new Set<string>());
 
@@ -211,6 +298,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (prevChatIdRef.current !== chatId) {
       prevChatIdRef.current = chatId;
+      chatExistsRef.current = false;
       if (isNewChat) {
         setMessages([]);
       }
@@ -248,7 +336,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
   }, [sendMessage, chatId]);
 
   useAutoResume({
-    autoResume: false, // backend does not support stream resumption
+    autoResume: false,
     initialMessages,
     resumeStream,
     setMessages,
@@ -271,6 +359,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
       setMessages,
       sendMessage,
       status,
+      error: chatError,
       stop,
       regenerate,
       addToolApprovalResponse,
@@ -291,6 +380,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
       setMessages,
       sendMessage,
       status,
+      chatError,
       stop,
       regenerate,
       addToolApprovalResponse,

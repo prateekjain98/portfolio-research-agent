@@ -12,6 +12,17 @@ export async function getUser(email: string): Promise<any> {
   return data ?? [];
 }
 
+export async function getUserById(id: string): Promise<any> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("User")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+}
+
 export async function createUser(
   email: string,
   password: string

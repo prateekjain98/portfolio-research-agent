@@ -1,7 +1,12 @@
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 
 export async function POST(request: Request) {
-  const body = await request.json();
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ code: "bad_request", message: "Invalid JSON" }, { status: 400 });
+  }
 
   let messages: Array<{ role: string; content: string }> = [];
 
@@ -31,49 +36,32 @@ export async function POST(request: Request) {
     session_id: sessionId || null,
   };
 
-  const backendRes = await fetch(`${BACKEND_URL}/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(backendBody),
-  });
+  try {
+    const backendRes = await fetch(`${BACKEND_URL}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(backendBody),
+    });
 
-  if (!backendRes.ok) {
-    const text = await backendRes.text();
+    if (!backendRes.ok) {
+      const text = await backendRes.text();
+      return Response.json(
+        { code: "backend_error", message: "Backend error", cause: text.slice(0, 500) },
+        { status: backendRes.status }
+      );
+    }
+
+    return new Response(backendRes.body, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Accel-Buffering": "no",
+      },
+    });
+  } catch (err: any) {
     return Response.json(
-      { code: "offline:chat", message: "Backend error", cause: text },
-      { status: backendRes.status }
+      { code: "backend_unreachable", message: "Cannot reach backend", cause: err.message },
+      { status: 503 }
     );
   }
-
-  const reader = backendRes.body?.getReader();
-
-  const stream = new ReadableStream({
-    async start(controller) {
-      if (!reader) {
-        controller.close();
-        return;
-      }
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          controller.enqueue(value);
-        }
-        controller.close();
-      } catch (error) {
-        controller.error(error);
-      }
-    },
-    cancel() {
-      reader?.cancel();
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "no-store",
-      "X-Accel-Buffering": "no",
-    },
-  });
 }

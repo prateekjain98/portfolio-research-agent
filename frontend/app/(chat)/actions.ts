@@ -4,6 +4,11 @@ import { cookies } from "next/headers";
 import { auth } from "@/app/(auth)/auth";
 import type { VisibilityType } from "@/components/chat/visibility-selector";
 import {
+  createUser,
+  getUser,
+  getUserById,
+  saveChat,
+  saveMessages,
   deleteMessagesByChatIdAfterTimestamp,
   getChatById,
   getMessageById,
@@ -15,12 +20,65 @@ export async function saveChatModelAsCookie(model: string) {
   cookieStore.set("chat-model", model);
 }
 
+export async function ensureUser() {
+  const session = await auth();
+  if (!session?.user) return null;
+
+  const existing = await getUser(session.user.email);
+  if (existing && existing.length > 0) {
+    return existing[0];
+  }
+
+  return await createUser(session.user.email, "demo-password");
+}
+
+export async function createChat({
+  id,
+  title,
+  userId,
+  visibility = "private",
+}: {
+  id: string;
+  title: string;
+  userId: string;
+  visibility?: VisibilityType;
+}) {
+  // Ensure user exists before creating chat (FK constraint)
+  const existing = await getUserById(userId);
+  if (!existing) {
+    const session = await auth();
+    if (session?.user?.email) {
+      await createUser(session.user.email, "demo-password");
+    }
+  }
+  return await saveChat({
+    id,
+    title,
+    userId,
+    visibility,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+export async function createMessages({
+  messages,
+}: {
+  messages: Array<{
+    id: string;
+    chatId: string;
+    role: string;
+    parts: any[];
+    createdAt: string;
+  }>;
+}) {
+  return await saveMessages({ messages });
+}
+
 export async function generateTitleFromUserMessage({
   message,
 }: {
   message: { parts?: Array<{ type: string; text?: string }> };
 }) {
-  // Stub — no AI Gateway configured. Titles default to first words of message.
   const text =
     message.parts
       ?.filter((p) => p.type === "text")
