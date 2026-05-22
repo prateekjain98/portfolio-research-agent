@@ -190,20 +190,7 @@ function PureMultimodalInput({
           },
         });
         break;
-      case "purge":
-        toast("Delete all chats?", {
-          action: {
-            label: "Delete all",
-            onClick: () => {
-              fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/history`, {
-                method: "DELETE",
-              });
-              router.push("/");
-              toast.success("All chats deleted");
-            },
-          },
-        });
-        break;
+
       default:
         break;
     }
@@ -395,6 +382,7 @@ function PureMultimodalInput({
             chatId={chatId}
             selectedVisibilityType={selectedVisibilityType}
             sendMessage={sendMessage}
+            status={status}
           />
         )}
 

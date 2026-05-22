@@ -7,7 +7,7 @@ export async function createGuestUser(): Promise<any> { return [{ id: "guest-1",
 export async function saveChat(chat: any): Promise<any> { return chat; }
 export async function deleteChatById({ id }: { id: string }): Promise<any> { return { id }; }
 export async function deleteAllChatsByUserId(_args: any): Promise<any> { return; }
-export async function getChatsByUserId(_args: any): Promise<any> { return []; }
+export async function getChatsByUserId(_args: any): Promise<any> { return { chats: [], hasMore: false }; }
 export async function getChatById({ id }: { id: string }): Promise<any> {
   return null;
 }
