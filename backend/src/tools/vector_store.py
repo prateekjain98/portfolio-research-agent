@@ -6,6 +6,7 @@ import hashlib
 from typing import List, Optional
 
 from llama_index.core import Document, Settings, StorageContext, VectorStoreIndex
+from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.vector_stores.qdrant import QdrantVectorStore
