@@ -25,12 +25,13 @@ export async function getUserById(id: string): Promise<any> {
 
 export async function createUser(
   email: string,
-  password: string
+  password: string,
+  id?: string
 ): Promise<any> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("User")
-    .insert({ email, password })
+    .insert({ ...(id ? { id } : {}), email, password })
     .select()
     .single();
   if (error) throw error;

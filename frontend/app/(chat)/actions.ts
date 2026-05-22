@@ -29,7 +29,7 @@ export async function ensureUser() {
     return existing[0];
   }
 
-  return await createUser(session.user.email, "demo-password");
+  return await createUser(session.user.email, "demo-password", session.user.id);
 }
 
 export async function createChat({

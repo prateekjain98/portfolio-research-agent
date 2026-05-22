@@ -134,11 +134,25 @@ CREATE TABLE IF NOT EXISTS "Stream" (
 -- Row Level Security (RLS) — permissive for demo
 -- ============================================================
 
+ALTER TABLE "User" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Chat" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Message_v2" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Vote_v2" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Document" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Suggestion" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Stream" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE thesis_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE stock_recommendations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 
+CREATE POLICY "Allow all" ON "User" FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all" ON "Chat" FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all" ON "Message_v2" FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all" ON "Vote_v2" FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all" ON "Document" FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all" ON "Suggestion" FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all" ON "Stream" FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all" ON thesis_sessions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all" ON stock_recommendations FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all" ON documents FOR ALL USING (true) WITH CHECK (true);

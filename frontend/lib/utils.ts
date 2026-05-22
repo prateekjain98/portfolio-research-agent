@@ -15,7 +15,7 @@ export function cn(...inputs: ClassValue[]) {
 
 let _nativeFetch: typeof fetch | null = null;
 
-function getNativeFetch(): typeof fetch {
+export function getNativeFetch(): typeof fetch {
   if (typeof window === 'undefined') return fetch;
   if (_nativeFetch) return _nativeFetch;
   try {
@@ -25,7 +25,8 @@ function getNativeFetch(): typeof fetch {
     const win = iframe.contentWindow;
     if (win && win.fetch !== window.fetch) {
       _nativeFetch = win.fetch.bind(win);
-      document.body.removeChild(iframe);
+      // Keep the iframe in the DOM so its global scope doesn't shut down.
+      // Hidden and inaccessible, it provides a clean fetch reference.
       return _nativeFetch;
     }
     document.body.removeChild(iframe);
