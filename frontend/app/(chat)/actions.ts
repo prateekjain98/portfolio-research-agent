@@ -64,7 +64,7 @@ export async function createChat({
     if (!existing) {
       const session = await auth();
       if (session?.user?.email) {
-        await createUser(session.user.email, "demo-password");
+        await createUser(session.user.email, "demo-password", userId);
       }
     }
     return await saveChat({
