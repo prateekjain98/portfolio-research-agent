@@ -132,29 +132,6 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
-@app.get("/debug/qdrant")
-async def debug_qdrant() -> dict:
-    from src.tools.vector_store import SessionVectorStore
-    from src.config import settings
-    result = {
-        "qdrant_url": settings.qdrant_url,
-        "qdrant_api_key_set": bool(settings.qdrant_api_key),
-    }
-    try:
-        from qdrant_client import QdrantClient
-        kwargs = {"url": settings.qdrant_url, "timeout": 10}
-        if settings.qdrant_api_key:
-            kwargs["api_key"] = settings.qdrant_api_key
-        client = QdrantClient(**kwargs)
-        collections = client.get_collections()
-        result["collections"] = [c.name for c in collections.collections]
-        result["status"] = "connected"
-    except Exception as e:
-        result["status"] = "error"
-        result["error"] = str(e)
-    return result
-
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("src.main:app", host="0.0.0.0", port=int(os.getenv("PORT", "8000")), reload=True)
