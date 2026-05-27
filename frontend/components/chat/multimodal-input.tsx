@@ -740,9 +740,12 @@ function PureModelSelectorCompact({
                       )}
                       key={model.id}
                       onSelect={() => {
+                        console.log("[ModelSelector] onSelect fired for", model.id, "available=", available);
                         if (!available) {
+                          console.log("[ModelSelector] model not available, skipping");
                           return;
                         }
+                        console.log("[ModelSelector] calling onModelChange with", model.id, "onModelChange=", typeof onModelChange);
                         onModelChange?.(model.id);
                         setCookie("chat-model", model.id);
                         setOpen(false);
