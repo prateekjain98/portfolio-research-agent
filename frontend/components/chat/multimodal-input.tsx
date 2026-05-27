@@ -633,9 +633,11 @@ function PureModelSelectorCompact({
   const dynamicModels: ChatModel[] | undefined = modelsData?.models;
   const activeModels = dynamicModels?.length ? dynamicModels : chatModels;
 
-  // Available models are those returned by the backend /models endpoint
+  // Available models are those returned by the backend /models endpoint.
+  // Fallback: if the backend hasn't responded yet, assume all models are available
+  // so the user can still interact with the selector.
   const availableModelIds = new Set<string>(
-    modelsData?.available_model_ids ?? []
+    modelsData?.available_model_ids ?? chatModels.map((m) => m.id)
   );
 
   const selectedModel =
