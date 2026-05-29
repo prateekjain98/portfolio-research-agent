@@ -257,16 +257,18 @@ class Agent:
             system_msg = (
                 "You are a senior equity research analyst. This is a FOLLOW-UP question from the user "
                 "about a previous investment thesis. Answer their question directly and thoroughly.\n\n"
-                "RULES:\n"
-                "1. If the user asks about a SPECIFIC stock or ticker (e.g., 'dive deeper into NVST'), "
-                "   provide deep analysis on ONLY that stock. Include: business model, financial health, "
-                "   competitive position, risks, catalysts, and a clear buy/hold/sell stance.\n"
+                "CRITICAL RULES:\n"
+                "1. If the user mentions a SPECIFIC stock or ticker (e.g., 'dive deeper into NVST'), "
+                "   you MUST return ONLY that exact ticker in the stocks array. Provide deep analysis "
+                "   on ONLY that stock: business model, financial health, competitive position, risks, "
+                "   catalysts, and a clear buy/hold/sell stance. The rationale should be a detailed paragraph.\n"
                 "2. If the user asks a GENERAL question (e.g., 'what are the risks?'), answer using the research context.\n"
-                "3. DO NOT generate a new list of unrelated stocks unless the user explicitly asks for alternatives.\n"
-                "4. Be concise but thorough. Cite specific data points from the research context when possible.\n\n"
+                "3. NEVER include unrelated stocks or competitors unless the user explicitly asks for alternatives.\n"
+                "4. The 'theme' field should summarize the user's specific question, not a broad sector.\n"
+                "5. Be concise but thorough. Cite specific data points from the research context.\n\n"
                 "Return ONLY valid JSON:\n"
-                '{"theme":"...","summary":"...","conviction":"High|Medium|Low","stocks":['
-                '{"ticker":"NVST","name":"Envista Holdings","rationale":"Detailed analysis focused on the user question...","thematic_fit_score":85}]}'
+                '{"theme":"Deep Dive: NVST","summary":" focused analysis...","conviction":"High|Medium|Low","stocks":['
+                '{"ticker":"NVST","name":"Envista Holdings","rationale":"Detailed 200-word analysis on NVST covering business model, financials, risks, and catalysts...","thematic_fit_score":85}]}'
             )
         else:
             system_msg = (
@@ -330,27 +332,29 @@ class Agent:
         stocks = parsed.get("stocks", [])
 
         # --- ThemeMapper fallback -------------------------------------------
-        # If LLM produced no stocks or only generic FAANG, use ThemeMapper
-        GENERIC_TICKERS = {"AAPL", "GOOGL", "MSFT", "AMZN", "META", "TSLA", "NVDA", "GOOG"}
-        llm_tickers = {s.get("ticker", "").upper() for s in stocks}
-        if len(stocks) < 3 or llm_tickers.issubset(GENERIC_TICKERS):
-            theme = parsed.get("theme", query)
-            yield f"**Deep research** mapping '{theme}' to specific companies...\n\n"
-            try:
-                mapped = await asyncio.to_thread(
-                    self.theme_mapper.map_themes, [theme], max_results_per_theme=5
-                )
-                print(f"[Agent] ThemeMapper returned {len(mapped)} tickers: {[m['ticker'] for m in mapped]}")
-                for m in mapped:
-                    if m["ticker"] not in llm_tickers:
-                        stocks.append({
-                            "ticker": m["ticker"],
-                            "name": m["ticker"],
-                            "rationale": f"Mapped from theme: {m['theme']}",
-                            "thematic_fit_score": 75,
-                        })
-            except Exception as e:
-                print(f"[Agent] ThemeMapper error: {e}")
+        # For first-turn: if LLM produced no stocks or only generic FAANG, use ThemeMapper.
+        # For follow-ups: trust the LLM's focused output (often just 1 stock).
+        if not is_followup:
+            GENERIC_TICKERS = {"AAPL", "GOOGL", "MSFT", "AMZN", "META", "TSLA", "NVDA", "GOOG"}
+            llm_tickers = {s.get("ticker", "").upper() for s in stocks}
+            if len(stocks) < 3 or llm_tickers.issubset(GENERIC_TICKERS):
+                theme = parsed.get("theme", query)
+                yield f"**Deep research** mapping '{theme}' to specific companies...\n\n"
+                try:
+                    mapped = await asyncio.to_thread(
+                        self.theme_mapper.map_themes, [theme], max_results_per_theme=5
+                    )
+                    print(f"[Agent] ThemeMapper returned {len(mapped)} tickers: {[m['ticker'] for m in mapped]}")
+                    for m in mapped:
+                        if m["ticker"] not in llm_tickers:
+                            stocks.append({
+                                "ticker": m["ticker"],
+                                "name": m["ticker"],
+                                "rationale": f"Mapped from theme: {m['theme']}",
+                                "thematic_fit_score": 75,
+                            })
+                except Exception as e:
+                    print(f"[Agent] ThemeMapper error: {e}")
 
         print(f"[Agent] Scoring {len(stocks)} stocks")
         scored = []
