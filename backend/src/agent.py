@@ -331,6 +331,20 @@ class Agent:
 
         stocks = parsed.get("stocks", [])
 
+        # --- Follow-up stock filter -----------------------------------------
+        # If user asked about a specific ticker in a follow-up, enforce that
+        # ONLY that ticker appears in the output (LLMs often hallucinate peers).
+        if is_followup and stocks:
+            # Extract potential ticker mentions from the query (uppercase 1-5 letter words)
+            ticker_candidates = [w.upper() for w in re.findall(r'\b[A-Z]{1,5}\b', query)]
+            # Filter to those that actually appear as tickers in the LLM output
+            llm_tickers = {s.get("ticker", "").upper() for s in stocks}
+            matched = [t for t in ticker_candidates if t in llm_tickers]
+            if matched:
+                requested = matched[0]
+                stocks = [s for s in stocks if s.get("ticker", "").upper() == requested]
+                print(f"[Agent] Follow-up filtered to single stock: {requested}")
+
         # --- ThemeMapper fallback -------------------------------------------
         # For first-turn: if LLM produced no stocks or only generic FAANG, use ThemeMapper.
         # For follow-ups: trust the LLM's focused output (often just 1 stock).
