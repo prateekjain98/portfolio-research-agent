@@ -28,34 +28,48 @@ def _get_llm_client():
     return AsyncOpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url)
 
 
-async def _llm_chat(client, messages, model, temperature, max_tokens, timeout_sec: float = 60.0):
-    """Call LLM with timeout. Raises asyncio.TimeoutError if exceeded."""
-    if isinstance(client, AsyncOpenAI):
-        resp = await asyncio.wait_for(
-            client.chat.completions.create(
-                model=model, messages=messages, temperature=temperature, max_tokens=max_tokens,
-                response_format={"type": "json_object"},
-            ),
-            timeout=timeout_sec,
-        )
-        return resp.choices[0].message.content or "{}"
-    if client == "vertex":
-        from google import genai
-        from google.genai import types
-        gemini = genai.Client(vertexai=True, project=settings.vertex_project, location=settings.vertex_location or "us-central1")
-        system_msg = ""
-        user_msgs = []
-        for m in messages:
-            if m["role"] == "system":
-                system_msg = m["content"]
-            elif m["role"] == "user":
-                user_msgs.append(types.Content(role="user", parts=[types.Part(text=m["content"])]))
-            elif m["role"] == "assistant":
-                user_msgs.append(types.Content(role="model", parts=[types.Part(text=m["content"])]))
-        config = types.GenerateContentConfig(system_instruction=system_msg, temperature=temperature, max_output_tokens=max_tokens)
-        resp = gemini.models.generate_content(model=model, contents=user_msgs, config=config)
-        return resp.text or "{}"
-    # Anthropic
+async def _llm_chat_openai(client: AsyncOpenAI, messages, model, temperature, max_tokens, timeout_sec: float):
+    resp = await asyncio.wait_for(
+        client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format={"type": "json_object"},
+        ),
+        timeout=timeout_sec,
+    )
+    return resp.choices[0].message.content or "{}"
+
+
+async def _llm_chat_vertex(messages, model, temperature, max_tokens, timeout_sec: float):
+    from google import genai
+    from google.genai import types
+
+    gemini = genai.Client(
+        vertexai=True,
+        project=settings.vertex_project,
+        location=settings.vertex_location or "us-central1",
+    )
+    system_msg = ""
+    user_msgs = []
+    for m in messages:
+        if m["role"] == "system":
+            system_msg = m["content"]
+        elif m["role"] == "user":
+            user_msgs.append(types.Content(role="user", parts=[types.Part(text=m["content"])]))
+        elif m["role"] == "assistant":
+            user_msgs.append(types.Content(role="model", parts=[types.Part(text=m["content"])]))
+    config = types.GenerateContentConfig(
+        system_instruction=system_msg,
+        temperature=temperature,
+        max_output_tokens=max_tokens,
+    )
+    resp = gemini.models.generate_content(model=model, contents=user_msgs, config=config)
+    return resp.text or "{}"
+
+
+async def _llm_chat_anthropic(client, messages, model, temperature, max_tokens, timeout_sec: float):
     system_msg = ""
     user_msgs = []
     for m in messages:
@@ -74,6 +88,16 @@ async def _llm_chat(client, messages, model, temperature, max_tokens, timeout_se
         timeout=timeout_sec,
     )
     return resp.content[0].text if resp.content else "{}"
+
+
+async def _llm_chat(client, messages, model, temperature, max_tokens, timeout_sec: float = 60.0):
+    """Dispatch to the correct provider implementation."""
+    if isinstance(client, AsyncOpenAI):
+        return await _llm_chat_openai(client, messages, model, temperature, max_tokens, timeout_sec)
+    if client == "vertex":
+        return await _llm_chat_vertex(messages, model, temperature, max_tokens, timeout_sec)
+    # Anthropic
+    return await _llm_chat_anthropic(client, messages, model, temperature, max_tokens, timeout_sec)
 from src.db.supabase_client import get_supabase
 from src.tools.document_fetcher import DocumentFetcher
 from src.tools.document_parser import DocumentParser
